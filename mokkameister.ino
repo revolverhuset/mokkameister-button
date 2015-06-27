@@ -13,9 +13,9 @@
 
 const char* host = "mokkameister.herokuapp.com";
 const char* path = "/coffee-button/";
-
 const int httpPort = 80;
 
+const int POWERPIN = 4;
 
 #define SPININTERVAL 0.1
 #define LEDCOUNT 3
@@ -42,7 +42,22 @@ void stopSpinner() {
         digitalWrite(LEDPINS[i], LOW);
     }
 }
+
+void powerOff() {
+    digitalWrite(POWERPIN, LOW);
+    while (true) {}
+}
+
 void setup() {
+
+    // Keep power on
+    pinMode(POWERPIN, OUTPUT);
+    digitalWrite(POWERPIN, HIGH);
+
+    for (int i = 0; i < LEDCOUNT; i++) {
+        pinMode(LEDPINS[i], OUTPUT);
+    }
+
     Serial.begin(115200);
     delay(10);
 
@@ -99,9 +114,10 @@ void loop() {
     Serial.println();
     Serial.println("closing connection");
 
-    delay(5000);
+    delay(1000);
+    client.stop();
 
-    //TODO: DIE!
     delay(1000);
     stopSpinner();
+    powerOff();
 }
