@@ -8,6 +8,7 @@
  */
 
 #include <ESP8266WiFi.h>
+#include <Ticker.h>
 #include "secrets.h"
 
 const char* host = "mokkameister.herokuapp.com";
@@ -15,9 +16,37 @@ const char* path = "/coffee-button/";
 
 const int httpPort = 80;
 
+
+#define SPININTERVAL 0.1
+#define LEDCOUNT 3
+const int LEDPINS[] = { 5, 6, 7 };
+
+Ticker spinticker;
+volatile int spincount;
+
+void spin() {
+    spincount++;
+
+    for (int i = 0; i < LEDCOUNT; i++) {
+        if (spincount % LEDCOUNT == i) {
+            digitalWrite(LEDPINS[i], HIGH);
+        } else {
+            digitalWrite(LEDPINS[i], LOW);
+        }
+    }
+}
+
+void stopSpinner() {
+    spinticker.detach();
+    for (int i = 0; i < LEDCOUNT; i++) {
+        digitalWrite(LEDPINS[i], LOW);
+    }
+}
 void setup() {
     Serial.begin(115200);
     delay(10);
+
+    spinticker.attach(SPININTERVAL, spin);
 
     Serial.println();
     Serial.println();
@@ -73,4 +102,6 @@ void loop() {
     delay(5000);
 
     //TODO: DIE!
+    delay(1000);
+    stopSpinner();
 }
