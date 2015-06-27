@@ -9,6 +9,7 @@
 
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
+
 #include "secrets.h"
 
 const char* host = "mokkameister.herokuapp.com";
@@ -17,14 +18,17 @@ const int httpPort = 80;
 
 const int POWERPIN = 4;
 
-#define SPININTERVAL 0.1
+#define RETRYCOUNT 3
+#define SPININTERVAL 0.2
 #define LEDCOUNT 3
+
 const int LEDPINS[] = { 5, 6, 7 };
 
 Ticker spinticker;
+
 volatile int spincount;
 
-void spin() {
+void spinLEDs() {
     spincount++;
 
     for (int i = 0; i < LEDCOUNT; i++) {
@@ -43,29 +47,24 @@ void stopSpinner() {
     }
 }
 
-void powerOff() {
-    digitalWrite(POWERPIN, LOW);
-    while (true) {}
-}
+void flashFailure() {
+    int blinkCount = 12;
 
-void setup() {
-
-    // Keep power on
-    pinMode(POWERPIN, OUTPUT);
-    digitalWrite(POWERPIN, HIGH);
-
-    for (int i = 0; i < LEDCOUNT; i++) {
-        pinMode(LEDPINS[i], OUTPUT);
+    while (blinkCount-- > 0) {
+        for (int led = 0; led < LEDCOUNT; led++) {
+            if (blinkCount % 2 == 0) {
+                digitalWrite(LEDPINS[led], LOW);
+            } else {
+                digitalWrite(LEDPINS[led], HIGH);
+            }
+        }
+        delay(300);
     }
 
-    Serial.begin(115200);
-    delay(10);
+}
 
-    spinticker.attach(SPININTERVAL, spin);
-
-    Serial.println();
-    Serial.println();
-    Serial.print("Connecting to ");
+void wifiConnect() {
+    Serial.print("\n\nConnecting to ");
     Serial.println(ssid);
 
     WiFi.begin(ssid, password);
@@ -75,21 +74,28 @@ void setup() {
         Serial.print(".");
     }
 
-    Serial.println("");
-    Serial.println("WiFi connected");
+    Serial.println("\nWiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
 }
 
-void loop() {
+void keepPowerOn() {
+    pinMode(POWERPIN, OUTPUT);
+    digitalWrite(POWERPIN, HIGH);
+}
 
+void powerOff() {
+    digitalWrite(POWERPIN, LOW);
+}
+
+boolean doHttpPost() {
     Serial.print("connecting to ");
     Serial.println(host);
 
     WiFiClient client;
     if (!client.connect(host, httpPort)) {
         Serial.println("connection failed");
-        return;
+        return false;
     }
 
     Serial.print("Requesting URL: ");
@@ -114,10 +120,37 @@ void loop() {
     Serial.println();
     Serial.println("closing connection");
 
-    delay(1000);
-    client.stop();
+    delay(200);
 
-    delay(1000);
+    client.stop();
+    return true;
+}
+
+void setup() {
+    keepPowerOn();
+
+    for (int i = 0; i < LEDCOUNT; i++) {
+        pinMode(LEDPINS[i], OUTPUT);
+    }
+
+    Serial.begin(115200);
+    delay(10);
+
+    spinticker.attach(SPININTERVAL, spinLEDs);
+    wifiConnect();
+
+    // Retry RETRYCOUNT times:
+    for (int i = 0; i < RETRYCOUNT; i++) {
+        if (doHttpPost()) {
+            break;
+        } else if (i == RETRYCOUNT - 1) {
+            stopSpinner();
+            flashFailure();
+        }
+    }
+
     stopSpinner();
     powerOff();
 }
+
+void loop() {}
