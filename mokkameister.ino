@@ -19,10 +19,10 @@ const int httpPort = 80;
 const int POWERPIN = 4;
 
 #define RETRYCOUNT 3
-#define SPININTERVAL 0.2
+#define SPININTERVAL 0.09
 #define LEDCOUNT 3
 
-const int LEDPINS[] = { 5, 6, 7 };
+const int LEDPINS[] = { 12, 13, 14 };
 
 Ticker spinticker;
 
@@ -47,8 +47,8 @@ void stopSpinner() {
     }
 }
 
-void flashFailure() {
-    int blinkCount = 12;
+void flashAll(int times, int delayms) {
+    int blinkCount = times;
 
     while (blinkCount-- > 0) {
         for (int led = 0; led < LEDCOUNT; led++) {
@@ -58,25 +58,33 @@ void flashFailure() {
                 digitalWrite(LEDPINS[led], HIGH);
             }
         }
-        delay(300);
+        delay(delayms);
     }
 
 }
 
-void wifiConnect() {
+boolean wifiConnect() {
+    int retries = 100;
+
     Serial.print("\n\nConnecting to ");
     Serial.println(ssid);
 
     WiFi.begin(ssid, password);
 
-    while (WiFi.status() != WL_CONNECTED) {
+    while (retries-- > 0 && WiFi.status() != WL_CONNECTED) {
         delay(100);
         Serial.print(".");
     }
 
-    Serial.println("\nWiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi connected");
+        Serial.println("IP address: ");
+        Serial.println(WiFi.localIP());
+        return true;
+    } else {
+        Serial.println("\nWiFi connect failed");
+        return false;
+    }
 }
 
 void keepPowerOn() {
@@ -86,6 +94,7 @@ void keepPowerOn() {
 
 void powerOff() {
     digitalWrite(POWERPIN, LOW);
+    ESP.deepSleep(0, WAKE_RF_DEFAULT);
 }
 
 boolean doHttpPost() {
@@ -106,7 +115,7 @@ boolean doHttpPost() {
                  "Host: " + host + "\r\n" +
                  "Content-Type: application/x-www-form-urlencoded\r\n" +
                  "Connection: close\r\n"
-                 "Content-Length: 19\r\n" +   //TODO: calc length
+                 "Content-Length: " + String(7 + String(secret).length()) + "\r\n" +
                  "\r\n" +
                  "secret=" + secret + "\r\n" +
                  "\r\n");
@@ -131,13 +140,19 @@ void setup() {
 
     for (int i = 0; i < LEDCOUNT; i++) {
         pinMode(LEDPINS[i], OUTPUT);
+        digitalWrite(LEDPINS[i], LOW);
     }
 
     Serial.begin(115200);
-    delay(10);
 
     spinticker.attach(SPININTERVAL, spinLEDs);
-    wifiConnect();
+
+    if (!wifiConnect()) {
+        stopSpinner();
+        flashAll(40, 100);
+        powerOff();
+        return;
+    }
 
     // Retry RETRYCOUNT times:
     for (int i = 0; i < RETRYCOUNT; i++) {
@@ -145,11 +160,12 @@ void setup() {
             break;
         } else if (i == RETRYCOUNT - 1) {
             stopSpinner();
-            flashFailure();
+            flashAll(20, 500);
         }
     }
 
     stopSpinner();
+    flashAll(10, 300);
     powerOff();
 }
 
